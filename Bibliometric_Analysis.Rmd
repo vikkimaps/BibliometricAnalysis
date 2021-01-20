@@ -1,6 +1,6 @@
 ---
-title: "Biodiversity and Health Bibliometric Analysis: Topic"
-author: "Andy Hong"
+title: "Bibliometric Analysis: from Data to Decisions"
+author: "Andy Hong and Vikki Houlden"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
   html_document
@@ -38,8 +38,8 @@ show_col(hue_pal()(16))
 
 ```{r setup, message=FALSE, echo=FALSE}
 ## Home
-setwd("//client/H$/Documents/OneDrive - Newcastle University/Papers/DataDecisions/Review")
-#my.path = "//client/H$/Documents/OneDrive - Newcastle University/Papers/DataDecisions/Review"
+setwd("//client/H$/Documents/Papers/DataDecisions/Review")
+#my.path = "//client/H$/Documents//Papers/DataDecisions/Review"
 
 # Read all the WoS BibTex files in the directory 
 wos.data = readFiles( "WOS.ciw")
