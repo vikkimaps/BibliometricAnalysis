@@ -1,0 +1,482 @@
+---
+title: "Biodiversity and Health Bibliometric Analysis: Topic"
+author: "Andy Hong"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document
+---
+  
+```{r global_options, include=FALSE}
+## Allow duplicate labels
+if(!require(knitr)){install.packages("knitr"); require(knitr)} 
+opts_knit$set(knitr.duplicate.label = 'allow')
+opts_chunk$set(dev = 'png')
+opts_chunk$set(dpi = 300)
+```
+
+
+## 1. Setup and load data
+
+Install packages and set up paths
+
+```{r setup, message=FALSE, echo=FALSE}
+## Load packages
+#install.packages("bibliometrix", dependencies=TRUE)  
+
+require(bibliometrix)
+require(ggplot2)
+require(networkD3)
+require(scales)
+#
+```
+
+
+```{r setup, message=FALSE, echo=FALSE}
+show_col(hue_pal()(16))
+```
+
+
+```{r setup, message=FALSE, echo=FALSE}
+## Home
+setwd("//client/H$/Documents/OneDrive - Newcastle University/Papers/DataDecisions/Review")
+#my.path = "//client/H$/Documents/OneDrive - Newcastle University/Papers/DataDecisions/Review"
+
+# Read all the WoS BibTex files in the directory 
+wos.data = readFiles( "WOS.ciw")
+
+
+# Read the Scopus BibTex file in the directory
+#scopus.data = readFiles(file.path(my.path, "4-Data/2_second_search/scopus.bib"))
+
+TEMP =   file.path(my.path, "/Output", "temp.csv")
+
+```
+
+Load files and merge different database
+
+```{r}
+# --------------------------------------------------------
+# Load and clean data 
+# --------------------------------------------------------
+
+# combine the rows of each dataframe to make one
+# long character vector where each item in the vector
+# is a single text file
+#wos.data = unlist(wos.list)
+#df.wos = bib2df(wos.data, dbsource = "isi")
+#df.scopus = bib2df(scopus.data, dbsource = "scopus")
+df.wos <- convert2df(wos.data, dbsource="wos",format="plaintext")
+
+# Merge WOS and SCOPUS Data
+#df = mergeDbSources(df.wos, remove.duplicated=TRUE)
+
+
+# Remove function
+`%notin%` = Negate(`%in%`)
+
+# Remove anonymous or unknown authors
+df = subset(df.wos, AU %notin% c("[ANONYMOUS] A", "NA N"))
+
+# If year is NA, then it's likely most recent articles published online
+df$PY[is.na(df$PY)] = "2020"
+
+
+# Limit data from 2015 to 2019
+# time.limit = as.character(seq(2015, 2019))
+# M = subset(df, PY %in% time.limit)
+
+M = subset(df, !(PY %in% "2020"))
+#M = df
+
+#results = biblioAnalysis(d, sep = ";")
+
+
+```
+
+convert2df creates a bibliographic data frame with cases corresponding to manuscripts and variables to Field Tag in the original export file.
+
+Data frame columns are named using the standard Clarivate Analytics WoS Field Tag codify. 
+
+The main field tags are:
+
+Field Tag  | Description
+---------- | -----------
+AU		     | Authors
+TI		     | Document Title
+SO		     | Publication Name (or Source)
+JI		     | ISO Source Abbreviation
+DT		     | Document Type
+DE		     | Authors' Keywords
+ID		     | Keywords associated by SCOPUS or ISI database
+AB		     | Abstract
+C1		     | Author Address
+RP		     | Reprint Address
+CR		     | Cited References
+TC		     | Times Cited
+PY		     | Year
+SC		     | Subject Category
+UT		     | Unique Article Identifier
+DB		     | Bibliographic Database
+
+
+For a complete list of field tags see http://www.bibliometrix.org/documents/Field_Tags_bibliometrix.pdf
+
+
+## 2. Descriptive analysis
+
+The first step is to perform a descriptive analysis of the bibliographic data frame. 
+
+```{r}
+
+results = biblioAnalysis(df, sep = ";")
+
+```
+
+The function *biblioAnalysis* returns an object of class "bibliometrix".
+
+An object of class "bibliometrix" is a list containing the following components:
+
+List element       | Description
+------------------ | --------------------------------------------
+Articles		 | the total number of manuscripts
+Authors		   | the authors' frequency distribution
+AuthorsFrac	 | the authors' frequency distribution (fractionalized)
+FirstAuthors | first author of each manuscript
+nAUperPaper	 | the number of authors per manuscript
+Appearances |  the number of author appearances
+nAuthors		 | the number of authors
+AuMultiAuthoredArt | the number of authors of multi-authored articles
+MostCitedPapers | the list of manuscripts sorted by citations
+Years		     | publication year of each manuscript
+FirstAffiliation | the affiliation of the first author
+Affiliations | the frequency distribution of affiliations (of all co-authors for each paper)
+Aff_frac		 | the fractionalized frequency distribution of affiliations (of all co-authors for each paper)
+CO		       | the affiliation country of the first author
+Countries		 | the affiliation countries' frequency distribution
+CountryCollaboration | the intra-country (SCP) and inter-country (MCP) collaboration indices
+TotalCitation | 		 the number of times each manuscript has been cited
+TCperYear		 | the yearly average number of times each manuscript has been cited
+Sources		   | the frequency distribution of sources (journals, books, etc.)
+DE		       | the frequency distribution of authors' keywords
+ID		       | the frequency distribution of keywords associated to the manuscript by SCOPUS and Thomson Reuters' ISI Web of Knowledge databases
+
+### Articles per year
+
+The follwing shows some general patterns of the articles. This excludes the year 2020.
+
+```{r}
+
+# Articles per year
+x = biblioAnalysis(M)
+Tab=table(x$Years)
+
+## inserting missing years
+YY=setdiff(seq(min(x$Years, na.rm=TRUE),
+               max(x$Years, na.rm=TRUE)),names(Tab))
+Y=data.frame(Year=as.numeric(c(names(Tab),YY)),
+             Freq=c(as.numeric(Tab),rep(0,length(YY))))
+Y=Y[order(Y$Year),]
+
+names(Y)=c("Year","Freq")
+
+g=ggplot(Y, aes(x = Y$Year, y = Y$Freq)) +
+  # geom_bar(stat="identity") +
+  geom_point(color = '#00BFC4', size=2, shape=15, alpha = .6) +
+  geom_line(color = '#00BFC4', alpha = .6) +
+  geom_area(fill = '#00BFC4', alpha = .5) +
+  labs(x = 'Year'
+       , y = 'Articles') +
+  scale_x_continuous(breaks= (Y$Year[seq(1,length(Y$Year),by=4)])) +
+  theme(text = element_text(color = "#444444")
+        ,panel.background = element_rect(fill = '#FFFFFF')
+        ,panel.grid.minor = element_line(color = '#EFEFEF')
+        ,panel.grid.major = element_line(color = '#EFEFEF')
+        ,axis.title = element_text(size = 9, color = '#000000')
+        ,axis.title.y = element_text(vjust = 0.5, angle = 0)
+        ,axis.title.x = element_text(hjust = 0.5)
+        ,axis.text.x = element_text(size = 7)
+      
+  ) 
+
+plot(g)
+
+```
+
+
+
+### Articles per country
+
+The chart below shows the top 10 most productive countries.
+
+
+```{r}
+
+x = results
+k = 10
+
+# Countries
+xx=x$CountryCollaboration[1:k,]
+xx=xx[order(-(xx$SCP+xx$MCP)),]
+xx1=cbind(xx[,1:2],rep("SCP",k))
+names(xx1)=c("Country","Freq","Collaboration")
+xx2=cbind(xx[,c(1,3)],rep("MCP",k))
+names(xx2)=c("Country","Freq","Collaboration")
+xx=rbind(xx2,xx1)
+xx$Country=factor(xx$Country,levels=xx$Country[1:dim(xx2)[1]])
+g=suppressWarnings(ggplot(data=xx, aes(x=xx$Country, y=xx$Freq,fill=xx$Collaboration)) +
+                     geom_bar(stat="identity", alpha=0.8) +
+                     scale_x_discrete(limits = rev(levels(xx$Country))) +
+                     scale_fill_discrete(name="Collaboration",
+                     breaks=c("MCP","SCP"),
+                     labels=c("Multiple Country Publications", "Single Country Publications"))+
+                     # scale_fill_manual(name="Legend" , values=c("#002F80", "#E69F00")) +
+                     labs(title = "Highest Publishing Countries", 
+                          x = "Countries", 
+                          y = "Number of Articles") +
+                     theme_minimal() +
+                     theme(plot.caption = element_text(size = 9, hjust = 0.5,
+                                                       color = "blue", face = "italic")) +
+                     theme(legend.position = c(0.77, 0.2)) +
+                     theme(legend.background = element_rect(fill="white",
+                                  size=0.5, linetype="solid", 
+                                  colour ="darkgray")) +
+                     coord_flip())
+
+plot(g)
+
+```
+
+### Articles per author
+
+The chart below shows the top 10 most productive authors.
+
+
+```{r}
+
+# Authors
+xx=as.data.frame(x$Authors[1:k])
+g=ggplot(data=xx, aes(x=.data$AU, y=.data$Freq)) +
+  geom_bar(stat="identity", fill='#00BFC4')+
+  labs(title="Highest Publishing Authors", x = "Authors")+
+  labs(y = "Number of Articles")+
+  theme_minimal() +
+  coord_flip() + scale_x_discrete(limits = rev(levels(xx$AU)))
+
+plot(g)
+  
+# write.csv(M, TEMP)
+
+ 
+```
+
+### Top-Authors’ Productivity over the Time
+
+The function AuthorProdOverTime calculates and plots the authors’ production (in terms of number of publications, and total citations per year) over the time.
+
+Function arguments are: M a bibliographic data frame; k is the number of k Top Authors; graph is a logical. If graph=TRUE, the function plots the author production over time graph.
+
+```{r}
+myauthorprod <- function (M, k, graph) 
+{
+    M$TC = as.numeric(M$TC)
+    M$PY = as.numeric(M$PY)
+    AU = names(tableTag(M, "AU"))
+    k = min(k, length(AU))
+    AU = AU[1:k]
+    df = data.frame(Author = "NA", year = NA, TI = "NA", 
+        SO = "NA", DOI = "NA", TC = NA, TCpY = NA, 
+        stringsAsFactors = FALSE)
+    Y = as.numeric(substr(Sys.time(), 1, 4))
+    if (!("DI" %in% names(M))) {
+        M$DI = "NA"
+    }
+    for (i in 1:length(AU)) {
+        ind = which(regexpr(AU[i], M$AU) > -1)
+        TCpY = M$TC[ind]/(Y - M$PY[ind] + 1)
+        dfAU = data.frame(Author = rep(AU[i], length(ind)), year = M$PY[ind], 
+            TI = M$TI[ind], SO = M$SO[ind], DOI = M$DI[ind], 
+            TC = M$TC[ind], TCpY = TCpY, stringsAsFactors = TRUE)
+        df = rbind(df, dfAU)
+    }
+    df = df[-1, ]
+    df2 <- dplyr::group_by(df, .data$Author, .data$year) %>% 
+        dplyr::summarise(freq = length(.data$year), TC = sum(.data$TC), 
+            TCpY = sum(.data$TCpY))
+    df2 = as.data.frame(df2)
+    df2$Author = factor(df2$Author, levels = AU[1:k])
+    g <- ggplot(df2, aes(x = df2$Author, y = df2$year, text = paste("Author: ", 
+        df2$Author, "\nYear: ", df2$year, "\nN. of Articles: ", 
+        df2$freq, "\nTotal Citations per Year: ", round(TCpY, 
+            2)))) + geom_point(aes(alpha = df2$TCpY, size = df2$freq), 
+        color = "dodgerblue4") + scale_size(range = c(2, 
+        6)) + scale_alpha(range = c(0.3, 1)) + scale_y_continuous(breaks = seq(min(df2$year), 
+        max(df2$year), by = 2)) + guides(size = guide_legend(order = 1, 
+        "N.Articles"), alpha = guide_legend(order = 2, 
+        "TC per Year")) + theme(legend.position = "right", 
+        text = element_text(color = "#444444"), panel.background = element_rect(fill = "gray97"), 
+        panel.grid.minor = element_line(color = "#FFFFFF"), 
+        panel.grid.major = element_line(color = "#FFFFFF"), 
+        plot.title = element_text(size = 24), axis.title = element_text(size = 14, 
+            color = "#555555"), axis.title.y = element_text(vjust = 1, 
+            angle = 0, face = "bold"), axis.title.x = element_text(hjust = 0.95, 
+            face = "bold"), axis.text.x = element_text(face = "bold"), 
+        axis.text.y = element_text(face = "bold")) + labs(title = "Top-Authors' Production over the Time", 
+        x = "Author", y = "Year") + geom_line(aes(x = df2$Author, 
+        y = df2$year, group = df2$Author), size = 1, color = "firebrick", 
+        alpha = 0.3) + scale_x_discrete(limits = rev(levels(df2$Author))) + 
+        coord_flip()
+    df$DOI = as.character(df$DOI)
+    res <- list(dfAU = df2, dfPapersAU = df, graph = g)
+    if (isTRUE(graph)) {
+        plot(g)
+    }
+    return(res)
+}
+
+#topAU = authorProdOverTime(df, k = 10, graph = TRUE)
+topAU = myauthorprod(df, k = 10, graph = TRUE)
+
+
+```
+
+
+
+### Cited references
+
+To obtain the most frequent cited manuscripts:
+
+```{r}
+
+CR = citations(df, field = "article", sep = ";")
+data.frame(CR$Cited[1:10])
+
+```
+
+To obtain the most frequent cited first authors:
+
+
+```{r}
+CR = citations(df, field = "author", sep = ";")
+
+CR.table = data.frame(CR$Cited)
+
+# Remove irrelevant authors
+CR.table = subset(CR.table, CR %notin% c("ANONYMOUS","R CORE TEAM","R DEVELOPMENT CORE TEAM"))
+
+CR.table[1:10,]
+
+
+
+```
+
+
+## 3. Bibliographic network analysis
+
+### Co-citation Network
+
+```{r}
+# Create a co-citation network
+
+NetMatrix = biblioNetwork(df, analysis = "co-citation", 
+                           network = "references", sep = ";")
+
+# Plot the network
+net=networkPlot(NetMatrix, n = 30, Title = "Co-Citation Network, Top 30", 
+                type = "fruchterman", size=T, remove.multiple=FALSE, 
+                labelsize=0.6,edgesize = 5)
+```
+
+
+### Keyword co-occurrences
+
+The keyword analysis was limited to articles published in the last five years (from 2015 to 2019). This limitation was imposed due to technical issues, but the analysis provides valuable information on how different keywords are related to each other.
+
+```{r, fig.width=7, fig.height=7}
+
+
+# Create keyword co-occurrences network
+NetMatrix = biblioNetwork(df, analysis = "co-occurrences", 
+                           network = "keywords", sep = ";")
+
+# Plot the network
+net=networkPlot(NetMatrix, normalize="association", weighted=T, 
+                n = 30, Title = "Keyword Co-occurrences", type = "fruchterman", 
+                size=T,edgesize = 5,labelsize=0.7)
+
+```
+
+
+### Historical thematic mapping
+
+
+```{r, fig.width=7, fig.height=5}
+nexus = thematicEvolution(M, field="ID", years=c(2015), n=500, minFreq=5, stemming = T)
+plotThematicEvolution(nexus$Nodes, nexus$Edges)
+
+```
+
+### Editing Sankey Plot
+```{r, fig.width=7, fig.height=5}
+nexus = thematicEvolution(M, field="ID", years=c(2015), n=500, minFreq=5, stemming = T)
+
+
+
+for (i in 1:length(nexus$Nodes$name)){
+ if( nexus$Nodes$name[i] == "management--1991-2015" ) 
+ { nexus$Nodes$name[i] <- "management"}
+ else if ( nexus$Nodes$name[i] == "management--2016-2019" ) 
+  { nexus$Nodes$name[i] <- "management"}
+  else if ( nexus$Nodes$name[i] == "model--1991-2015" ) 
+ { nexus$Nodes$name[i] <- "model"}
+  else if ( nexus$Nodes$name[i] == "patterns--1991-2015" ) 
+ { nexus$Nodes$name[i] <- "patterns"}
+  else if ( nexus$Nodes$name[i] == "patterns--2016-2019" ) 
+  { nexus$Nodes$name[i] <- "patterns"}
+  else if ( nexus$Nodes$name[i] == "policy--1991-2015" ) 
+  { nexus$Nodes$name[i] <- "policy"}
+ else if ( nexus$Nodes$name[i] == "risk--1991-2015" ) 
+  { nexus$Nodes$name[i] <- "risk"}
+ else if ( nexus$Nodes$name[i] == "risk--2016-2019" ) 
+  { nexus$Nodes$name[i] <- "risk"}
+  else if ( nexus$Nodes$name[i] == "science--1991-2015" ) 
+  { nexus$Nodes$name[i] <- "science"}
+  else if ( nexus$Nodes$name[i] == "social-science--1991-2015" ) 
+  { nexus$Nodes$name[i] <- "social-science"}
+  else if ( nexus$Nodes$name[i] == "social-science--2016-2019" ) 
+  { nexus$Nodes$name[i] <- "social-science"}
+  else if ( nexus$Nodes$name[i] == "space--1991-2015" ) 
+  { nexus$Nodes$name[i] <- "space"}
+  else if ( nexus$Nodes$name[i] == "space--2016-2019" ) 
+  { nexus$Nodes$name[i] <- "space"}
+  else if ( nexus$Nodes$name[i] == "behavior--2016-2019" ) 
+  { nexus$Nodes$name[i] <- "behaviour"}
+  else if ( nexus$Nodes$name[i] == "knowledge--2016-2019" ) 
+  { nexus$Nodes$name[i] <- "knowledge"}
+  else if ( nexus$Nodes$name[i] == "time--2016-2019" ) 
+  { nexus$Nodes$name[i] <- "time"}
+}
+Nodes = nexus$Nodes
+Edges = nexus$Edges
+measure = 'inclusion'
+min.flow = 0
+
+my_colour <- 'd3.scaleOrdinal() .domain(["management", "model","patterns", "policy", "risk", "science", "social-science", "space", "management", "behaviour", "patterns", "knowledge","risk", "social-science","space", "time"]) .range(["#F8766D", "#DB8E00" , "#AEA200", "#64B200", "#00BD5C", "#00C17A", "#00BADE", "#00A6FF","#F8766D", "#B385FF", "#AEA200","#EF67EB", "#00BD5C","#00BADE", "#00A6FF", "#FF63B6"]);'
+
+#my_colour <- JS("d3.scaleOrdinal(d3.schemeCategory20);")
+
+switch(measure, inclusion = {
+        Edges = Edges[-c(4, 5)]
+    }, stability = {
+        Edges = Edges[-c(3, 4)]
+    }, weighted = {
+        Edges = Edges[, -c(3, 5)]
+    })
+
+    names(Edges)[3] = "weight"
+    Edges = Edges[Edges$weight >= min.flow, ]
+    Edges$weight = Edges$weight * 100
+    
+    
+    sankeyNetwork(Links = Edges, Nodes = Nodes, Source = "from", Target = "to", NodeID = "name", Value = "weight",
+  width = 900, fontFamily = "sans", fontSize = 12, nodeWidth = 30, NodeGroup = "group",  LinkGroup = "group", colourScale = my_colour)
+```
